@@ -129,11 +129,53 @@ public class EmailWithAttachmentExample
 }
 ```
 
+## Logging
+
+You can enable verbose logging to diagnose issues with the Graph API or authentication. This writes detailed logs from the Azure SDK to a specified file.
+
+### .NET
+
+```csharp
+// Enable logging
+O365GraphMailer.EnableLogging(@"C:\Temp\GraphMailer.log");
+
+// ... perform operations ...
+
+// Disable logging
+O365GraphMailer.DisableLogging();
+```
+
+### OpenEdge ABL
+
+```abl
+// Enable logging
+GraphMailer.O365GraphMailer:EnableLogging("C:\Temp\GraphMailer.log").
+
+// ... perform operations ...
+
+// Disable logging
+GraphMailer.O365GraphMailer:DisableLogging().
+```
+
 ## OpenEdge ABL Usage
 
 You can consume the .NET library directly from OpenEdge ABL.
 
-### 1. Place the `GraphMailer.dll` and its dependencies (`Azure.Identity.dll`, `Microsoft.Graph.Core.dll`, `Microsoft.Graph.dll`, etc.) in a location accessible by your OpenEdge application.
+### 1. Deployment & Dependencies
+
+Place the `GraphMailer.dll` and all its dependencies in a location accessible by your OpenEdge application (e.g., your assemblies directory).
+
+**Note on Assembly Resolution:** This library includes a built-in assembly resolver. This helps avoid version conflicts and eliminates the need for complex `app.config` binding redirects for standard dependencies. Ensure all the following DLLs (and their dependencies) are present in the same directory:
+
+*   `Azure.Core.dll`
+*   `Azure.Identity.dll`
+*   `Microsoft.Bcl.AsyncInterfaces.dll`
+*   `Microsoft.Graph.dll`
+*   `Microsoft.Graph.Core.dll`
+*   `Microsoft.Identity.Client.dll`
+*   `System.Text.Json.dll`
+*   `System.Memory.dll`
+*   ...and other dependencies from the build output.
 
 ### 2. Sending a Simple Email
 
@@ -247,6 +289,20 @@ FINALLY:
         System.IO.File:Delete(cAttachmentPath).
 END FINALLY.
 ```
+
+## Troubleshooting
+
+### Authentication Failed
+If you receive an "Authentication failed" error:
+1.  Verify your **Tenant ID**, **Client ID**, and **Client Secret**.
+2.  Ensure the application in Azure AD has the **`Mail.Send`** permission (Application type).
+3.  **Important:** Ensure **Admin Consent** has been granted for these permissions.
+
+### Access Denied (Large Attachments)
+If you receive an "Access is denied" error when sending attachments larger than 3MB:
+1.  The library uses the Microsoft Graph "large attachment" API (upload session) for files > 3MB.
+2.  This process requires the **`Mail.ReadWrite`** permission (Application type) to create and modify a draft message.
+3.  Grant this permission in Azure AD and ensure Admin Consent is granted.
 
 ## Extensibility
 
