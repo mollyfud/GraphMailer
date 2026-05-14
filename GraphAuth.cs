@@ -1,3 +1,4 @@
+using Azure.Core;
 using Azure.Core.Diagnostics;
 using Azure.Identity;
 using Microsoft.Graph;
@@ -5,6 +6,8 @@ using System;
 using System.IO;
 using System.Diagnostics.Tracing;
 using System.Reflection;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace GraphMailer
 {
@@ -15,6 +18,7 @@ namespace GraphMailer
     {
         private readonly AuthenticationData _authData;
         private static AzureEventSourceListener _listener;
+        private static readonly ConcurrentDictionary<string, GraphServiceClient> _clientCache = new ConcurrentDictionary<string, GraphServiceClient>();
 
         static GraphAuth()
         {
@@ -120,18 +124,52 @@ namespace GraphMailer
         }
 
         /// <summary>
-        /// Creates and returns an authenticated GraphServiceClient.
+        /// Acquires a fresh access token for the Microsoft Graph API and returns the raw JWT string.
+        /// Always fetches a new token, bypassing the MSAL cache, to reflect the current Azure AD state.
         /// </summary>
-        /// <returns>An authenticated <see cref="GraphServiceClient"/>.</returns>
-        public GraphServiceClient GetAuthenticatedGraphClient()
+        /// <returns>The raw JWT access token string.</returns>
+        public async Task<string> GetTokenAsync()
         {
             var credentials = new ClientSecretCredential(
                 _authData.TenantId,
                 _authData.ClientId,
                 _authData.ClientSecret);
 
-            var graphClient = new GraphServiceClient(credentials);
-            return graphClient;
+            var tokenResult = await credentials.GetTokenAsync(
+                new TokenRequestContext(new[] { "https://graph.microsoft.com/.default" }))
+                .ConfigureAwait(false);
+
+            return tokenResult.Token;
+        }
+
+        /// <summary>
+        /// Acquires a fresh access token for the Microsoft Graph API and returns the raw JWT string.
+        /// Always fetches a new token, bypassing the MSAL cache, to reflect the current Azure AD state.
+        /// </summary>
+        /// <returns>The raw JWT access token string.</returns>
+        public string GetToken()
+        {
+            return GetTokenAsync().GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Creates and returns an authenticated GraphServiceClient.
+        /// </summary>
+        /// <returns>An authenticated <see cref="GraphServiceClient"/>.</returns>
+        public GraphServiceClient GetAuthenticatedGraphClient()
+        {
+            // Create a unique key for the credentials to reuse the client
+            string key = $"{_authData.TenantId}:{_authData.ClientId}:{_authData.ClientSecret}";
+
+            return _clientCache.GetOrAdd(key, k =>
+            {
+                var credentials = new ClientSecretCredential(
+                    _authData.TenantId,
+                    _authData.ClientId,
+                    _authData.ClientSecret);
+
+                return new GraphServiceClient(credentials);
+            });
         }
     }
 }

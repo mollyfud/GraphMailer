@@ -157,6 +157,79 @@ GraphMailer.O365GraphMailer:EnableLogging("C:\Temp\GraphMailer.log").
 GraphMailer.O365GraphMailer:DisableLogging().
 ```
 
+## Token Diagnostics
+
+If you receive a `401 Unauthorized` error from the Graph API, you can dump the current access token to inspect exactly what permissions it contains. This is the most reliable way to confirm whether `Mail.Send` (and other required permissions) have been properly granted and consented in Azure AD.
+
+The dump writes the raw JWT string — which you can paste directly into **[https://jwt.ms](https://jwt.ms)** — along with a decoded summary of the key claims, including a clear warning if `Mail.Send` is missing from the `roles` claim.
+
+> **Note:** This method always acquires a **fresh** token directly from Azure AD, bypassing the internal MSAL cache. This means the dump always reflects the current state of your app registration, even if a cached token is still being used for sending.
+
+### .NET
+
+```csharp
+var mailer = new O365GraphMailer(authData);
+
+// Write the dump to a file and get the string back
+string dump = await mailer.GetTokenDumpAsync(@"C:\Temp\token_dump.txt");
+Console.WriteLine(dump);
+
+// Or just get the string without writing to a file
+string dump = await mailer.GetTokenDumpAsync();
+
+// Synchronous version
+string dump = mailer.GetTokenDump(@"C:\Temp\token_dump.txt");
+```
+
+### OpenEdge ABL
+
+```abl
+DEFINE VARIABLE cDump AS CHARACTER NO-UNDO.
+
+// Write to file and return the dump string
+cDump = oMailer:GetTokenDump("C:\Temp\token_dump.txt").
+MESSAGE cDump VIEW-AS ALERT-BOX.
+
+// Or without a file
+cDump = oMailer:GetTokenDump().
+MESSAGE cDump VIEW-AS ALERT-BOX.
+```
+
+### Sample Output
+
+```
+=== RAW TOKEN - paste into https://jwt.ms ===
+
+eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...
+
+=== DECODED PAYLOAD ===
+{
+  "aud": "https://graph.microsoft.com",
+  "appid": "your-client-id",
+  "tid": "your-tenant-id",
+  "roles": [
+    "Mail.Send"
+  ],
+  "exp": 1741737262,
+  ...
+}
+=== KEY CLAIMS ===
+roles : ["Mail.Send"]
+  OK: Mail.Send is present.
+exp   : 2026-03-11 22:34:22 UTC
+appid : your-client-id
+tid   : your-tenant-id
+```
+
+If `Mail.Send` is missing from `roles`, you will see a warning like:
+
+```
+roles : []
+  *** WARNING: 'roles' is EMPTY. Mail.Send has not been granted/consented in Azure AD. ***
+```
+
+In that case, go to **Azure AD → App registrations → [Your App] → API permissions**, confirm `Mail.Send` is listed as an **Application** permission, and click **Grant admin consent**.
+
 ## OpenEdge ABL Usage
 
 You can consume the .NET library directly from OpenEdge ABL.
@@ -311,4 +384,10 @@ This library is designed to be simple and straightforward. You can extend it in 
 *   **Error Handling**: Implement more robust error handling and logging.
 *   **Configuration**: Instead of hardcoding authentication data, load it from a configuration file (`app.config`, `web.config`, etc.).
 *   **Dependency Injection**: In applications that support it, you can register `O365GraphMailer` and its dependencies with a dependency injection container.
+
+## Signing the DLL
+
+To sign the DLL with a strong name key:
+1. Generate a key file: `sn -k GraphMailer.snk`
+2. The project is already configured to use this file.
 

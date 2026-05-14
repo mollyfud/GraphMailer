@@ -19,6 +19,7 @@ namespace GraphMailer
     public class GraphEmailSender
     {
         private readonly GraphServiceClient _graphClient;
+        private static readonly HttpClient _httpClient = new HttpClient();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="GraphEmailSender"/> class.
@@ -252,34 +253,34 @@ namespace GraphMailer
             // 320 KB * 12 = 3840 KB = 3.75 MB chunks
             int chunkSize = 320 * 1024 * 12; 
 
-            using (var httpClient = new HttpClient())
+            // Use the static HttpClient to avoid socket exhaustion
+            var stream = attachment.ContentStream;
+            if (stream.CanSeek) stream.Position = 0;
+            
+            long totalLength = stream.Length;
+            byte[] buffer = new byte[chunkSize];
+            long uploadedBytes = 0;
+
+            while (uploadedBytes < totalLength)
             {
-                var stream = attachment.ContentStream;
-                if (stream.CanSeek) stream.Position = 0;
+                int bytesRead = await stream.ReadAsync(buffer, 0, chunkSize).ConfigureAwait(false);
                 
-                long totalLength = stream.Length;
-                byte[] buffer = new byte[chunkSize];
-                long uploadedBytes = 0;
-
-                while (uploadedBytes < totalLength)
+                using (var request = new HttpRequestMessage(HttpMethod.Put, uploadSession.UploadUrl))
                 {
-                    int bytesRead = await stream.ReadAsync(buffer, 0, chunkSize).ConfigureAwait(false);
-                    
-                    using (var request = new HttpRequestMessage(HttpMethod.Put, uploadSession.UploadUrl))
-                    {
-                        request.Content = new ByteArrayContent(buffer, 0, bytesRead);
-                        request.Content.Headers.ContentRange = new ContentRangeHeaderValue(uploadedBytes, uploadedBytes + bytesRead - 1, totalLength);
-                        request.Content.Headers.ContentLength = bytesRead;
+                    request.Content = new ByteArrayContent(buffer, 0, bytesRead);
+                    request.Content.Headers.ContentRange = new ContentRangeHeaderValue(uploadedBytes, uploadedBytes + bytesRead - 1, totalLength);
+                    request.Content.Headers.ContentLength = bytesRead;
 
-                        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
+                    using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                    {
                         if (!response.IsSuccessStatusCode)
                         {
                             throw new Exception($"Failed to upload chunk. Status: {response.StatusCode}, Reason: {response.ReasonPhrase}");
                         }
                     }
-
-                    uploadedBytes += bytesRead;
                 }
+
+                uploadedBytes += bytesRead;
             }
         }
 
