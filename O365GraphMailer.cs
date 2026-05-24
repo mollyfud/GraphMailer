@@ -24,7 +24,7 @@ namespace GraphMailer
         {
             _graphAuth = new GraphAuth(authData);
             var graphClient = _graphAuth.GetAuthenticatedGraphClient();
-            _emailSender = new GraphEmailSender(graphClient);
+            _emailSender = new GraphEmailSender(graphClient, message => GraphAuth.WriteLogEntry("Info", message));
         }
 
         /// <summary>

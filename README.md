@@ -2,6 +2,11 @@
 
 A .NET library for sending emails via the Microsoft Graph API, designed to be easily consumed by both .NET and OpenEdge ABL applications.
 
+## Azure Setup Guide
+
+For a full step-by-step Azure application setup, see:
+- [Azure App Registration Guide](Azure-App-Registration-Guide.md)
+
 ## Prerequisites
 
 Before using this library, you need to register an application in Azure Active Directory (Azure AD) and grant it the necessary permissions to send emails.

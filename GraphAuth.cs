@@ -19,6 +19,7 @@ namespace GraphMailer
         private readonly AuthenticationData _authData;
         private static AzureEventSourceListener _listener;
         private static readonly ConcurrentDictionary<string, GraphServiceClient> _clientCache = new ConcurrentDictionary<string, GraphServiceClient>();
+        private static Action<string> _logWriter;
 
         static GraphAuth()
         {
@@ -48,16 +49,21 @@ namespace GraphMailer
                     Directory.CreateDirectory(directory);
                 }
 
-                _listener = new AzureEventSourceListener((eventData, message) =>
+                _logWriter = message =>
                 {
                     try
                     {
-                        File.AppendAllText(logFilePath, $"[{DateTime.UtcNow:HH:mm:ss.fffffff}][{eventData.Level}] {message}\n");
+                        File.AppendAllText(logFilePath, message + Environment.NewLine);
                     }
                     catch
                     {
                         // Ignore logging errors to prevent crashing the application
                     }
+                };
+
+                _listener = new AzureEventSourceListener((eventData, message) =>
+                {
+                    WriteLogEntry(eventData.Level.ToString(), message);
                 }, EventLevel.Verbose);
             }
             catch
@@ -67,12 +73,29 @@ namespace GraphMailer
         }
 
         /// <summary>
+        /// Writes a message to the configured log sink.
+        /// </summary>
+        /// <param name="level">The severity level for the log entry.</param>
+        /// <param name="message">The message to write.</param>
+        internal static void WriteLogEntry(string level, string message)
+        {
+            var writer = _logWriter;
+            if (writer == null)
+            {
+                return;
+            }
+
+            writer($"[{DateTime.UtcNow:HH:mm:ss.fffffff}][{level}] {message}");
+        }
+
+        /// <summary>
         /// Disables logging.
         /// </summary>
         public static void DisableLogging()
         {
             _listener?.Dispose();
             _listener = null;
+            _logWriter = null;
         }
 
         /// <summary>
